@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: admin-dashboard
-        image: mtceel/admin-dashboard:f219f4a
+        image: mtceel/admin-dashboard:09c6a72
         ports:
         - containerPort: 80
         resources:
