@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-dashboard-blue
+  namespace: platform-services
+  labels:
+    app: admin-dashboard
+    version: blue
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: admin-dashboard
+      version: blue
+  template:
+    metadata:
+      labels:
+        app: admin-dashboard
+        version: blue
+    spec:
+      containers:
+      - name: admin-dashboard
+        image: ghcr.io/mtceel/admin-dashboard:latest
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
