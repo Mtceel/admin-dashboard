@@ -1,12 +1,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: admin-dashboard-blue
+  name: admin-dashboard-react
   namespace: platform-services
 spec:
   selector:
-    app: admin-dashboard
-    version: blue
+    app: admin-dashboard-react
   ports:
   - port: 80
     targetPort: 80
