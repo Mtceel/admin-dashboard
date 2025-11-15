@@ -8,6 +8,17 @@ const queryClient = new QueryClient();
 // SECURITY: Use nginx proxy to internal platform-api (no external API exposure)
 const API_URL = '';
 
+// Helper function to format age in seconds to human-readable
+const formatAge = (seconds: number): string => {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  
+  if (days > 0) return `${days}d${hours}h`;
+  if (hours > 0) return `${hours}h${minutes}m`;
+  return `${minutes}m`;
+};
+
 interface AuthResponse {
   token: string;
   user: {
@@ -122,7 +133,7 @@ function Login({ onLogin }: { onLogin: (token: string) => void }) {
 }
 
 function Dashboard({ token, onLogout }: { token: string; onLogout: () => void }) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'tenants' | 'kubernetes'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'tenants' | 'infrastructure' | 'kubernetes'>('overview');
 
   const axiosConfig = {
     headers: { Authorization: `Bearer ${token}` },
@@ -156,6 +167,66 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
       return response.data.pods;
     },
     refetchInterval: 5000, // Refresh every 5 seconds for real-time monitoring
+  });
+
+  // Fetch infrastructure overview
+  const { data: infraOverview } = useQuery({
+    queryKey: ['infra-overview'],
+    queryFn: async () => {
+      const response = await axios.get(`${API_URL}/api/admin/infrastructure/overview`, axiosConfig);
+      return response.data;
+    },
+    refetchInterval: 10000,
+  });
+
+  // Fetch all pods
+  const { data: allPods } = useQuery({
+    queryKey: ['infra-pods'],
+    queryFn: async () => {
+      const response = await axios.get(`${API_URL}/api/admin/infrastructure/pods`, axiosConfig);
+      return response.data;
+    },
+    refetchInterval: 5000,
+  });
+
+  // Fetch nodes
+  const { data: nodes } = useQuery({
+    queryKey: ['infra-nodes'],
+    queryFn: async () => {
+      const response = await axios.get(`${API_URL}/api/admin/infrastructure/nodes`, axiosConfig);
+      return response.data;
+    },
+    refetchInterval: 10000,
+  });
+
+  // Fetch deployments
+  const { data: deployments } = useQuery({
+    queryKey: ['infra-deployments'],
+    queryFn: async () => {
+      const response = await axios.get(`${API_URL}/api/admin/infrastructure/deployments`, axiosConfig);
+      return response.data;
+    },
+    refetchInterval: 5000,
+  });
+
+  // Fetch services
+  const { data: services } = useQuery({
+    queryKey: ['infra-services'],
+    queryFn: async () => {
+      const response = await axios.get(`${API_URL}/api/admin/infrastructure/services`, axiosConfig);
+      return response.data;
+    },
+    refetchInterval: 15000,
+  });
+
+  // Fetch PVCs
+  const { data: pvcs } = useQuery({
+    queryKey: ['infra-pvcs'],
+    queryFn: async () => {
+      const response = await axios.get(`${API_URL}/api/admin/infrastructure/pvcs`, axiosConfig);
+      return response.data;
+    },
+    refetchInterval: 15000,
   });
 
   const handleSuspendTenant = async (tenantId: number) => {
@@ -212,10 +283,16 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
           🏪 Tenants
         </button>
         <button
+          className={activeTab === 'infrastructure' ? 'active' : ''}
+          onClick={() => setActiveTab('infrastructure')}
+        >
+          🚀 Infrastructure
+        </button>
+        <button
           className={activeTab === 'kubernetes' ? 'active' : ''}
           onClick={() => setActiveTab('kubernetes')}
         >
-          ⚙️ Kubernetes
+          ⚙️ Kubernetes (Legacy)
         </button>
       </nav>
 
@@ -341,6 +418,252 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
                 {!tenants?.length && <p className="empty-state">No tenants yet</p>}
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'infrastructure' && (
+          <div className="infrastructure">
+            <h2>🚀 Infrastructure Monitoring</h2>
+            
+            {/* Cluster Overview */}
+            <div className="stats-grid">
+              <div className="stat-card">
+                <div className="stat-value">{infraOverview?.cluster.nodes || 0}</div>
+                <div className="stat-label">Cluster Nodes</div>
+                <div className="stat-detail">
+                  {infraOverview?.cluster.healthy ? '✅ Healthy' : '⚠️ Issues Detected'}
+                </div>
+              </div>
+
+              <div className="stat-card">
+                <div className="stat-value">{infraOverview?.cluster.pods.running || 0}/{infraOverview?.cluster.pods.total || 0}</div>
+                <div className="stat-label">Running Pods</div>
+                <div className="stat-detail">
+                  {infraOverview?.cluster.pods.pending > 0 && `${infraOverview.cluster.pods.pending} pending`}
+                  {infraOverview?.cluster.pods.failed > 0 && ` ${infraOverview.cluster.pods.failed} failed`}
+                </div>
+              </div>
+
+              <div className="stat-card">
+                <div className="stat-value">{infraOverview?.cluster.deployments.healthy || 0}/{infraOverview?.cluster.deployments.total || 0}</div>
+                <div className="stat-label">Healthy Deployments</div>
+                <div className="stat-detail">
+                  {infraOverview?.cluster.deployments.degraded > 0 ? `⚠️ ${infraOverview.cluster.deployments.degraded} degraded` : '✅ All healthy'}
+                </div>
+              </div>
+
+              <div className="stat-card">
+                <div className="stat-value">{services?.total || 0}</div>
+                <div className="stat-label">Services</div>
+                <div className="stat-detail">ClusterIP & LoadBalancer</div>
+              </div>
+
+              <div className="stat-card">
+                <div className="stat-value">{pvcs?.total || 0}</div>
+                <div className="stat-label">Persistent Volumes</div>
+                <div className="stat-detail">Database storage</div>
+              </div>
+
+              <div className="stat-card">
+                <div className="stat-value">{nodes?.nodes?.filter((n: any) => n.status === 'Ready').length || 0}</div>
+                <div className="stat-label">Ready Nodes</div>
+                <div className="stat-detail">K8s cluster capacity</div>
+              </div>
+            </div>
+
+            {/* Deployments Table */}
+            <div style={{ marginTop: '2rem' }}>
+              <h3>📦 Deployments</h3>
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Namespace</th>
+                      <th>Replicas</th>
+                      <th>Ready</th>
+                      <th>Up-to-Date</th>
+                      <th>Available</th>
+                      <th>Age</th>
+                      <th>Strategy</th>
+                      <th>Image</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deployments?.deployments?.map((dep: any) => (
+                      <tr key={`${dep.namespace}-${dep.name}`}>
+                        <td><code>{dep.name}</code></td>
+                        <td>{dep.namespace}</td>
+                        <td>{dep.replicas}</td>
+                        <td>
+                          <span className={dep.ready === dep.replicas ? 'status-badge active' : 'status-badge suspended'}>
+                            {dep.ready}/{dep.replicas}
+                          </span>
+                        </td>
+                        <td>{dep.upToDate}</td>
+                        <td>{dep.available}</td>
+                        <td>{formatAge(dep.age)}</td>
+                        <td>{dep.strategy}</td>
+                        <td><small>{dep.image.split('/').pop()}</small></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Pods Table */}
+            <div style={{ marginTop: '2rem' }}>
+              <h3>🐳 All Pods</h3>
+              <p className="info">Real-time pod status (updates every 5 seconds)</p>
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Pod Name</th>
+                      <th>Namespace</th>
+                      <th>Status</th>
+                      <th>Ready</th>
+                      <th>Restarts</th>
+                      <th>Age</th>
+                      <th>Node</th>
+                      <th>IP Address</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allPods?.pods?.map((pod: any) => (
+                      <tr key={`${pod.namespace}-${pod.name}`}>
+                        <td><code>{pod.name}</code></td>
+                        <td>{pod.namespace}</td>
+                        <td>
+                          <span className={`status-badge ${pod.status === 'Running' ? 'active' : 'suspended'}`}>
+                            {pod.status}
+                          </span>
+                        </td>
+                        <td>{pod.ready}</td>
+                        <td>{pod.restarts > 0 ? <span style={{ color: 'orange' }}>⚠️ {pod.restarts}</span> : pod.restarts}</td>
+                        <td>{formatAge(pod.age)}</td>
+                        <td>{pod.nodeName}</td>
+                        <td><small>{pod.ip}</small></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Nodes Table */}
+            <div style={{ marginTop: '2rem' }}>
+              <h3>🖥️ Cluster Nodes</h3>
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Node Name</th>
+                      <th>Status</th>
+                      <th>Roles</th>
+                      <th>Age</th>
+                      <th>Version</th>
+                      <th>CPU</th>
+                      <th>Memory</th>
+                      <th>Pods Capacity</th>
+                      <th>OS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {nodes?.nodes?.map((node: any) => (
+                      <tr key={node.name}>
+                        <td><code>{node.name}</code></td>
+                        <td>
+                          <span className={`status-badge ${node.status === 'Ready' ? 'active' : 'suspended'}`}>
+                            {node.status}
+                          </span>
+                        </td>
+                        <td>{node.roles}</td>
+                        <td>{formatAge(node.age)}</td>
+                        <td><small>{node.version}</small></td>
+                        <td>{node.cpu} cores</td>
+                        <td>{node.memory}</td>
+                        <td>{node.pods}</td>
+                        <td><small>{node.osImage}</small></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Services Table */}
+            <div style={{ marginTop: '2rem' }}>
+              <h3>🌐 Services</h3>
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Service Name</th>
+                      <th>Namespace</th>
+                      <th>Type</th>
+                      <th>Cluster IP</th>
+                      <th>External IP</th>
+                      <th>Ports</th>
+                      <th>Age</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {services?.services?.map((svc: any) => (
+                      <tr key={`${svc.namespace}-${svc.name}`}>
+                        <td><code>{svc.name}</code></td>
+                        <td>{svc.namespace}</td>
+                        <td>{svc.type}</td>
+                        <td><small>{svc.clusterIP}</small></td>
+                        <td>{svc.externalIP}</td>
+                        <td><small>{svc.ports}</small></td>
+                        <td>{formatAge(svc.age)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* PVCs Table */}
+            <div style={{ marginTop: '2rem' }}>
+              <h3>💾 Persistent Volume Claims</h3>
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>PVC Name</th>
+                      <th>Namespace</th>
+                      <th>Status</th>
+                      <th>Volume</th>
+                      <th>Capacity</th>
+                      <th>Access Modes</th>
+                      <th>Storage Class</th>
+                      <th>Age</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pvcs?.pvcs?.map((pvc: any) => (
+                      <tr key={`${pvc.namespace}-${pvc.name}`}>
+                        <td><code>{pvc.name}</code></td>
+                        <td>{pvc.namespace}</td>
+                        <td>
+                          <span className={`status-badge ${pvc.status === 'Bound' ? 'active' : 'suspended'}`}>
+                            {pvc.status}
+                          </span>
+                        </td>
+                        <td><small>{pvc.volume}</small></td>
+                        <td>{pvc.capacity}</td>
+                        <td>{pvc.accessModes}</td>
+                        <td>{pvc.storageClass}</td>
+                        <td>{formatAge(pvc.age)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
 
