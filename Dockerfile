@@ -1,4 +1,4 @@
-FROM nginx:alpine
+FROM docker.io/nginx:alpine
 
 # Copy pre-built files
 COPY dist/ /usr/share/nginx/html/

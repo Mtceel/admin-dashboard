@@ -133,7 +133,7 @@ function Login({ onLogin }: { onLogin: (token: string) => void }) {
 }
 
 function Dashboard({ token, onLogout }: { token: string; onLogout: () => void }) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'tenants' | 'infrastructure' | 'kubernetes'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'tenants' | 'infrastructure' | 'microservices' | 'kubernetes'>('overview');
 
   const axiosConfig = {
     headers: { Authorization: `Bearer ${token}` },
@@ -229,6 +229,16 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
     refetchInterval: 15000,
   });
 
+  // Fetch microservices health
+  const { data: microservices, isLoading: microservicesLoading } = useQuery({
+    queryKey: ['microservices'],
+    queryFn: async () => {
+      const response = await axios.get(`${API_URL}/api/admin/microservices`, axiosConfig);
+      return response.data;
+    },
+    refetchInterval: 5000, // Refresh every 5 seconds
+  });
+
   const handleSuspendTenant = async (tenantId: number) => {
     if (!confirm('Are you sure you want to suspend this tenant?')) return;
 
@@ -281,6 +291,12 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
           onClick={() => setActiveTab('tenants')}
         >
           🏪 Tenants
+        </button>
+        <button
+          className={activeTab === 'microservices' ? 'active' : ''}
+          onClick={() => setActiveTab('microservices')}
+        >
+          🔌 Microservices
         </button>
         <button
           className={activeTab === 'infrastructure' ? 'active' : ''}
@@ -417,6 +433,127 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
                 </table>
                 {!tenants?.length && <p className="empty-state">No tenants yet</p>}
               </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'microservices' && (
+          <div className="microservices">
+            <h2>🔌 Microservices Health</h2>
+            <p className="info">Shopify-style isolated services (updates every 5 seconds)</p>
+            
+            {microservicesLoading ? (
+              <p>Loading microservices status...</p>
+            ) : (
+              <>
+                <div className="stats-grid" style={{ marginBottom: '2rem' }}>
+                  {microservices?.services?.map((service: any) => (
+                    <div key={service.name} className="stat-card">
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                        <h3 style={{ margin: 0, fontSize: '1.1rem' }}>{service.name}</h3>
+                        <span className={`status-badge ${service.status === 'healthy' ? 'active' : 'suspended'}`}>
+                          {service.status === 'healthy' ? '✅ Healthy' : service.status === 'unhealthy' ? '⚠️ Unhealthy' : '❌ Unreachable'}
+                        </span>
+                      </div>
+                      
+                      {service.status === 'healthy' ? (
+                        <>
+                          <div className="stat-detail" style={{ marginBottom: '0.5rem' }}>
+                            ⏱️ Uptime: {Math.floor(service.uptime / 60)}m {Math.floor(service.uptime % 60)}s
+                          </div>
+                          
+                          {service.connections && (
+                            <div style={{ fontSize: '0.9rem', color: '#666' }}>
+                              {service.connections.database && (
+                                <div>💾 Database: {service.connections.database}</div>
+                              )}
+                              {service.connections.redis && (
+                                <div>🔴 Redis: {service.connections.redis}</div>
+                              )}
+                              {service.connections.productsService && (
+                                <div>📦 Products: {service.connections.productsService}</div>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="stat-detail" style={{ color: '#e74c3c' }}>
+                          ⚠️ {service.error || 'Service unavailable'}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="info-section">
+                  <h3>🎯 Why Microservices?</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
+                    <div>
+                      <strong>✅ Isolation</strong>
+                      <p style={{ margin: '0.5rem 0', color: '#666' }}>
+                        If checkout fails, products/storefront still work
+                      </p>
+                    </div>
+                    <div>
+                      <strong>✅ Independent Scaling</strong>
+                      <p style={{ margin: '0.5rem 0', color: '#666' }}>
+                        Scale checkout during Black Friday without touching products
+                      </p>
+                    </div>
+                    <div>
+                      <strong>✅ Security</strong>
+                      <p style={{ margin: '0.5rem 0', color: '#666' }}>
+                        Payment data isolated from product catalog
+                      </p>
+                    </div>
+                    <div>
+                      <strong>✅ Deployment</strong>
+                      <p style={{ margin: '0.5rem 0', color: '#666' }}>
+                        Update services independently without downtime
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '2rem' }}>
+                  <h3>📊 Service Details</h3>
+                  <div className="table-container">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Service</th>
+                          <th>Status</th>
+                          <th>Uptime</th>
+                          <th>Database</th>
+                          <th>Redis</th>
+                          <th>Dependencies</th>
+                          <th>Last Check</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {microservices?.services?.map((service: any) => (
+                          <tr key={service.name}>
+                            <td><code>{service.name}</code></td>
+                            <td>
+                              <span className={`status-badge ${service.status === 'healthy' ? 'active' : 'suspended'}`}>
+                                {service.status}
+                              </span>
+                            </td>
+                            <td>{service.uptime ? `${Math.floor(service.uptime / 60)}m` : '-'}</td>
+                            <td>{service.connections?.database || '-'}</td>
+                            <td>{service.connections?.redis || '-'}</td>
+                            <td>
+                              {service.connections?.productsService && '📦 Products '}
+                              {service.connections?.ordersService && '📋 Orders'}
+                            </td>
+                            <td><small>{service.timestamp ? new Date(service.timestamp).toLocaleTimeString() : '-'}</small></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
             )}
           </div>
         )}
